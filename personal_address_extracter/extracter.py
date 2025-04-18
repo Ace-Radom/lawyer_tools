@@ -6,8 +6,11 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 from paddleocr import PaddleOCR
 from rich import print as rprint
+from rich.panel import Panel
 
 ocr_worker = PaddleOCR(use_angle_cls=True, show_log=False, lang="ch")
+
+TARGET_IMAGE_DIRNAME = "images"
 
 TAG_NAME = "姓名"
 TAG_SEX = "性别"
@@ -124,7 +127,7 @@ def find_data_with_tag(result, tag: str) -> tuple[str, float]:
 def extract_picture_personal_data(image_path: str) -> personal_data:
     result = perform_ocr(image_path)
     if not check_ocr_result(result):
-        return {}
+        return personal_data()
     # illegal ocr result
 
     data = personal_data()
@@ -162,7 +165,28 @@ def extract_picture_personal_data(image_path: str) -> personal_data:
     return data
 
 def main():
-    return
+    os.chdir(os.path.dirname(__file__))
+    if not os.path.isdir(TARGET_IMAGE_DIRNAME):
+        rprint(f"[red]Error[/]: target image directory `{TARGET_IMAGE_DIRNAME}` doesn't exist.")
+        return 1
+    for _, _, files in os.walk(TARGET_IMAGE_DIRNAME):
+        rprint(f"Total [cyan]{len(files)}[/] files found.")
+        for file in files:
+            rprint(f"Extracting personal datas from file `[cyan]{file}[/]`...")
+            data = extract_picture_personal_data(os.path.join(TARGET_IMAGE_DIRNAME, file))
+            if data.empty():
+                continue
+            panel_text = f" [yellow]•[/] [green]{TAG_NAME}[/]: {data.name}\n"
+            panel_text += f" [yellow]•[/] [green]{TAG_SEX}[/]: {data.sex}\n"
+            panel_text += f" [yellow]•[/] [green]{TAG_ID}[/]: {data.id}\n"
+            panel_text += f" [yellow]•[/] [green]{TAG_BIRTH}[/]: {data.birth}\n"
+            panel_text += f" [yellow]•[/] [green]{TAG_ADDR}[/]: {data.addr}"
+            panel = Panel(
+                panel_text,
+                title=f"Datas from `[cyan]{file}[/]`"
+            )
+            rprint(panel)
+            
 
 if __name__ == "__main__":
     main()
