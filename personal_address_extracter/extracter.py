@@ -1,9 +1,12 @@
+import openpyxl
 import os
 import warnings
 
 os.environ["PADDLE_OCR_BASE_DIR"] = "D:\paddleOCR"
 warnings.filterwarnings("ignore", category=UserWarning)
 
+from datetime import datetime
+from openpyxl.styles import Alignment
 from paddleocr import PaddleOCR
 from rich import print as rprint
 from rich.panel import Panel
@@ -169,6 +172,7 @@ def main():
     if not os.path.isdir(TARGET_IMAGE_DIRNAME):
         rprint(f"[red]Error[/]: target image directory `{TARGET_IMAGE_DIRNAME}` doesn't exist.")
         return 1
+    personal_datas = []
     for _, _, files in os.walk(TARGET_IMAGE_DIRNAME):
         rprint(f"Total [cyan]{len(files)}[/] files found.")
         for file in files:
@@ -186,7 +190,41 @@ def main():
                 title=f"Datas from `[cyan]{file}[/]`"
             )
             rprint(panel)
-            
+            personal_datas.append(data)
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
+
+    wb = openpyxl.Workbook()
+    sheet = wb.active
+    sheet.title = f"户籍数据汇总"
+    # sheet title
+    sheet["B1"] = TAG_NAME
+    sheet["C1"] = TAG_SEX
+    sheet["D1"] = TAG_ID
+    sheet["E1"] = TAG_BIRTH
+    sheet["F1"] = TAG_ADDR
+    # header
+    center_alignment = Alignment(horizontal='center', vertical='center')
+    sheet["B1"].alignment = center_alignment
+    sheet["C1"].alignment = center_alignment
+    sheet["D1"].alignment = center_alignment
+    sheet["E1"].alignment = center_alignment
+    sheet["F1"].alignment = center_alignment
+    sheet.column_dimensions["D"].width = 20
+    sheet.column_dimensions["E"].width = 15
+    sheet.column_dimensions["F"].width = 100
+    # style
+
+    for index, data in enumerate(personal_datas):
+        row_index = index + 2
+        sheet.cell(row_index, 1, index + 1)
+        sheet.cell(row_index, 2, data.name)
+        sheet.cell(row_index, 3, data.sex)
+        sheet.cell(row_index, 4, data.id)
+        sheet.cell(row_index, 5, data.birth)
+        sheet.cell(row_index, 6, data.addr)
+
+    wb.save("test.xlsx")
 
 if __name__ == "__main__":
     main()

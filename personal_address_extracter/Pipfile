@@ -12,6 +12,7 @@ name = "mirrorbaidu"
 paddlepaddle = "*"
 paddleocr = "*"
 rich = "*"
+openpyxl = "*"
 
 [dev-packages]
 
