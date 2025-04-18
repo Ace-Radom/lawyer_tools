@@ -11,6 +11,7 @@ name = "mirrorbaidu"
 [packages]
 paddlepaddle = "*"
 paddleocr = "*"
+rich = "*"
 
 [dev-packages]
 
