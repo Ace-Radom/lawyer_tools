@@ -192,7 +192,7 @@ def main():
             rprint(panel)
             personal_datas.append(data)
 
-    now_str = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
+    now_str = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
 
     wb = openpyxl.Workbook()
     sheet = wb.active
@@ -224,7 +224,7 @@ def main():
         sheet.cell(row_index, 5, data.birth)
         sheet.cell(row_index, 6, data.addr)
 
-    wb.save("test.xlsx")
+    wb.save(f"户籍数据汇总.{now_str}.xlsx")
 
 if __name__ == "__main__":
     main()
