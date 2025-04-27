@@ -22,6 +22,7 @@ TAG_BIRTH = "出生日期"
 TAG_ADDR = "户籍地址"
 
 SAME_LINE_Y_MAX_PIXEL_OFFSET = 50
+SAME_TAG_DATA_X_MAX_PIXEL_OFFSET = 20
 
 class coord:
     def __init__(self) -> None:
@@ -110,23 +111,25 @@ def get_uo_coord(coords: list[list[float]]) -> coord:
         # (y,x)
         for co in coords:
             ordered_coords.append(coord(co[1], co[0]))
+    # x-offset should always bigger than y-offset
 
     return ordered_coords[0]
+    # coord order: lu -> lo -> ro -> ru
+    # TODO: orders of coords may be changed in different models, a reorder may be necessary
 
-def find_data_with_tag(result, tag: str) -> tuple[str, float]:
+def find_data_with_tag(result, tag: str, allow_multiline: bool) -> tuple[str, float]:
     tag_coord_uo: coord = {}
     for line in result:
         recognized_text = line[1][0]
         if recognized_text == tag:
             tag_coord_uo = get_uo_coord(line[0])
-            # coord order: lu -> lo -> ro -> ru
-            # TODO: orders of coords may be changed in different models, a reorder may be necessary
             break
     if tag_coord_uo.empty():
         rprint(f"[red]Error[/]: tag `{tag}` not found in OCR result.")
         return ("", -1)
     
     closest_line = []
+    possible_lines = []
     
     for line in result:
         recognized_text = line[1][0]
@@ -136,18 +139,44 @@ def find_data_with_tag(result, tag: str) -> tuple[str, float]:
         
         this_coord_uo = get_uo_coord(line[0])
         if abs(this_coord_uo.y - tag_coord_uo.y) < SAME_LINE_Y_MAX_PIXEL_OFFSET and this_coord_uo.x > tag_coord_uo.x:
-            if len(closest_line) != 0:
+            if allow_multiline:
+                possible_lines.append(line)
+            elif len(closest_line) != 0:
                 closest_line_uo = get_uo_coord(closest_line[0])
                 if closest_line_uo.x <= this_coord_uo.x or abs(closest_line_uo.y - tag_coord_uo.y) < abs(this_coord_uo.y - tag_coord_uo.y):
                     continue
                 # closest line until now has a closer position to tag or a smaller y-offset, skip this line
             # closest line not empty, judge which one is closer
             closest_line = line
-    if len(closest_line) == 0:
-        rprint(f"[red]Error[/]: no data assigned to tag `{tag}` was found.")
-        return ("", -1)
     
-    return (closest_line[1][0], closest_line[1][1])
+    if allow_multiline:
+        if len(possible_lines) == 0:
+            rprint(f"[red]Error[/]: no data assigned to tag `{tag}` was found.")
+            return ("", -1)
+        for i in range(0, len(possible_lines)):
+            for j in range(0 , i):
+                if get_uo_coord(possible_lines[i][0]).y < get_uo_coord(possible_lines[j][0]).y:
+                    temp = possible_lines[i]
+                    possible_lines[i] = possible_lines[j]
+                    possible_lines[j] = temp
+        if len(possible_lines) > 2:
+            data = possible_lines[-2][1][0] + possible_lines[-1][1][0]
+            acc = (possible_lines[-2][1][1] + possible_lines[-1][1][1]) / 2
+            return (data, acc)
+        elif len(possible_lines) < 2:
+            return (possible_lines[0][1][0], possible_lines[0][1][1])
+        else:
+            if abs(get_uo_coord(possible_lines[0][0]).x - get_uo_coord(possible_lines[1][0]).x) > SAME_TAG_DATA_X_MAX_PIXEL_OFFSET:
+                return(possible_lines[-1][1][0], possible_lines[-1][1][1])
+            # two lines were found but one doesn't belong to this tag
+            data = possible_lines[0][1][0] + possible_lines[1][1][0]
+            acc = (possible_lines[0][1][1] + possible_lines[1][1][1]) / 2
+            return (data, acc)
+    else:
+        if len(closest_line) == 0:
+            rprint(f"[red]Error[/]: no data assigned to tag `{tag}` was found.")
+            return ("", -1)
+        return (closest_line[1][0], closest_line[1][1])
 
 def extract_picture_personal_data(image_path: str) -> personal_data:
     result = perform_ocr(image_path)
@@ -157,31 +186,31 @@ def extract_picture_personal_data(image_path: str) -> personal_data:
 
     data = personal_data()
 
-    data.name, acc = find_data_with_tag(result, TAG_NAME)
+    data.name, acc = find_data_with_tag(result, TAG_NAME, allow_multiline=False)
     if acc == -1:
         return personal_data()
     elif acc < 0.95:
         rprint("[yellow]Warning[/]: low accuracy expected on `name`.")
 
-    data.sex, acc = find_data_with_tag(result, TAG_SEX)
+    data.sex, acc = find_data_with_tag(result, TAG_SEX, allow_multiline=False)
     if acc == -1:
         return personal_data()
     elif acc < 0.95:
         rprint("[yellow]Warning[/]: low accuracy expected on `sex`.")
 
-    data.id, acc = find_data_with_tag(result, TAG_ID)
+    data.id, acc = find_data_with_tag(result, TAG_ID, allow_multiline=False)
     if acc == -1:
         return personal_data()
     elif acc < 0.95:
         rprint("[yellow]Warning[/]: low accuracy expected on `id`.")
 
-    data.birth, acc = find_data_with_tag(result, TAG_BIRTH)
+    data.birth, acc = find_data_with_tag(result, TAG_BIRTH, allow_multiline=False)
     if acc == -1:
         return personal_data()
     elif acc < 0.95:
         rprint("[yellow]Warning[/]: low accuracy expected on `birth`.")
 
-    data.addr, acc = find_data_with_tag(result, TAG_ADDR)
+    data.addr, acc = find_data_with_tag(result, TAG_ADDR, allow_multiline=True)
     if acc == -1:
         return personal_data()
     elif acc < 0.95:
