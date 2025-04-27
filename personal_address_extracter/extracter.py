@@ -22,8 +22,6 @@ TAG_BIRTH = "出生日期"
 TAG_ADDR = "户籍地址"
 
 SAME_LINE_Y_MAX_PIXEL_OFFSET = 50
-RESULT_COORD_X_OFFSET = 1
-RESULT_COORD_Y_OFFSET = 0
 
 class coord:
     def __init__(self) -> None:
@@ -31,9 +29,9 @@ class coord:
         self.y = -1
         return
 
-    def __init__(self, coord: list) -> None:
-        self.x = coord[RESULT_COORD_X_OFFSET]
-        self.y = coord[RESULT_COORD_Y_OFFSET]
+    def __init__(self, x: float, y: float) -> None:
+        self.x = x
+        self.y = y
         return
 
     def empty(self) -> bool:
@@ -92,12 +90,35 @@ def check_ocr_result(result: list) -> bool:
             return False
     return True
 
+def get_uo_coord(coords: list[list[float]]) -> coord:
+    # (0,0) means under-left corner of the picture (by default)
+    p0_min = 65536
+    p0_max = -1
+    p1_min = 65536
+    p1_max = -1
+    for co in coords:
+        if co[0] > p0_max: p0_max = co[0]
+        if co[0] < p0_min: p0_min = co[0]
+        if co[1] > p1_max: p1_max = co[1]
+        if co[1] < p1_min: p1_min = co[1]
+    ordered_coords = []
+    if (p0_max - p0_min) >= (p1_max - p1_min):
+        # (x,y)
+        for co in coords:
+            ordered_coords.append(coord(co[0], co[1]))
+    else:
+        # (y,x)
+        for co in coords:
+            ordered_coords.append(coord(co[1], co[0]))
+
+    return ordered_coords[0]
+
 def find_data_with_tag(result, tag: str) -> tuple[str, float]:
     tag_coord_uo: coord = {}
     for line in result:
         recognized_text = line[1][0]
         if recognized_text == tag:
-            tag_coord_uo = coord(line[0][0])
+            tag_coord_uo = get_uo_coord(line[0])
             # coord order: lu -> lo -> ro -> ru
             # TODO: orders of coords may be changed in different models, a reorder may be necessary
             break
@@ -113,12 +134,13 @@ def find_data_with_tag(result, tag: str) -> tuple[str, float]:
             continue
         # skip tag itself
         
-        this_coord_uo = coord(line[0][0])
+        this_coord_uo = get_uo_coord(line[0])
         if abs(this_coord_uo.y - tag_coord_uo.y) < SAME_LINE_Y_MAX_PIXEL_OFFSET and this_coord_uo.x > tag_coord_uo.x:
             if len(closest_line) != 0:
-                if coord(closest_line[0][0]).x <= this_coord_uo.x:
+                closest_line_uo = get_uo_coord(closest_line[0])
+                if closest_line_uo.x <= this_coord_uo.x or abs(closest_line_uo.y - tag_coord_uo.y) < abs(this_coord_uo.y - tag_coord_uo.y):
                     continue
-                # closest line until now has a closer position to tag, skip this line
+                # closest line until now has a closer position to tag or a smaller y-offset, skip this line
             # closest line not empty, judge which one is closer
             closest_line = line
     if len(closest_line) == 0:
