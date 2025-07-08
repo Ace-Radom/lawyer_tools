@@ -230,7 +230,12 @@ def main():
             rprint(f"Extracting personal datas from file `[cyan]{file}[/]`...")
             data = extract_picture_personal_data(os.path.join(TARGET_IMAGE_DIRNAME, file))
             if data.empty():
+                personal_datas.append({
+                    "filename": file,
+                    "data": personal_data()
+                })
                 continue
+            # OCR failed, push an empty data into list
             panel_text = f" [yellow]•[/] [green]{TAG_NAME}[/]: {data.name}\n"
             panel_text += f" [yellow]•[/] [green]{TAG_SEX}[/]: {data.sex}\n"
             panel_text += f" [yellow]•[/] [green]{TAG_ID}[/]: {data.id}\n"
@@ -241,7 +246,10 @@ def main():
                 title=f"Datas from `[cyan]{file}[/]`"
             )
             rprint(panel)
-            personal_datas.append(data)
+            personal_datas.append({
+                "filename": file,
+                "data": data
+            })
 
     now_str = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
 
@@ -249,11 +257,12 @@ def main():
     sheet = wb.active
     sheet.title = f"户籍数据汇总"
     # sheet title
-    sheet["B1"] = TAG_NAME
-    sheet["C1"] = TAG_SEX
-    sheet["D1"] = TAG_ID
-    sheet["E1"] = TAG_BIRTH
-    sheet["F1"] = TAG_ADDR
+    sheet["B1"] = "源文件名"
+    sheet["C1"] = TAG_NAME
+    sheet["D1"] = TAG_SEX
+    sheet["E1"] = TAG_ID
+    sheet["F1"] = TAG_BIRTH
+    sheet["G1"] = TAG_ADDR
     # header
     center_alignment = Alignment(horizontal='center', vertical='center')
     sheet["B1"].alignment = center_alignment
@@ -261,19 +270,27 @@ def main():
     sheet["D1"].alignment = center_alignment
     sheet["E1"].alignment = center_alignment
     sheet["F1"].alignment = center_alignment
-    sheet.column_dimensions["D"].width = 20
-    sheet.column_dimensions["E"].width = 15
-    sheet.column_dimensions["F"].width = 100
+    sheet["G1"].alignment = center_alignment
+    sheet.column_dimensions["B"].width = 30
+    sheet.column_dimensions["E"].width = 20
+    sheet.column_dimensions["F"].width = 15
+    sheet.column_dimensions["G"].width = 100
     # style
 
-    for index, data in enumerate(personal_datas):
+    for index, this_data in enumerate(personal_datas):
+        filename = this_data["filename"]
+        data = this_data["data"]
         row_index = index + 2
         sheet.cell(row_index, 1, index + 1)
-        sheet.cell(row_index, 2, data.name)
-        sheet.cell(row_index, 3, data.sex)
-        sheet.cell(row_index, 4, data.id)
-        sheet.cell(row_index, 5, data.birth)
-        sheet.cell(row_index, 6, data.addr)
+        sheet.cell(row_index, 2, filename)
+        if data.empty():
+            continue
+        # failed result
+        sheet.cell(row_index, 3, data.name)
+        sheet.cell(row_index, 4, data.sex)
+        sheet.cell(row_index, 5, data.id)
+        sheet.cell(row_index, 6, data.birth)
+        sheet.cell(row_index, 7, data.addr)
 
     wb.save(f"户籍数据汇总.{now_str}.xlsx")
 
