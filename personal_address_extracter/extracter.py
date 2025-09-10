@@ -218,6 +218,27 @@ def extract_picture_personal_data(image_path: str) -> personal_data:
 
     return data
 
+# Check if address contains repetition.
+# This ain't an OCR bug on my side, some of the datas from the gov repeat province's name
+# (or more) twice, so they need to be erased.
+# If this function returns an empty string, means nothing needs to be changed, address looks good.
+# If not, it returns the address which has been fixed.
+def check_addr_repetition(addr: str) -> str:
+    if len(addr) == 0:
+        rprint("[red]Error[/]: checking empty address.")
+        exit(1)
+    # this should never happens...
+    if addr[2] == "市":
+        plu = addr[:3]
+    else:
+        plu = addr[:addr.find("省") + 1]
+    # provincial level unit
+    next_plu_bpos = addr.find(plu, 1)
+    if next_plu_bpos == -1:
+        return ""
+    else:
+        return addr[next_plu_bpos:]
+
 def main():
     os.chdir(os.path.dirname(__file__))
     if not os.path.isdir(TARGET_IMAGE_DIRNAME):
@@ -236,6 +257,11 @@ def main():
                 })
                 continue
             # OCR failed, push an empty data into list
+            check_addr_res = check_addr_repetition(data.addr)
+            if len(check_addr_res) != 0:
+                data.addr = check_addr_res
+                rprint(f"[yellow]Warning[/]: Address repetition exists, fixed.")
+            # check address repetition
             panel_text = f" [yellow]•[/] [green]{TAG_NAME}[/]: {data.name}\n"
             panel_text += f" [yellow]•[/] [green]{TAG_SEX}[/]: {data.sex}\n"
             panel_text += f" [yellow]•[/] [green]{TAG_ID}[/]: {data.id}\n"
