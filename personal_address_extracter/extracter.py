@@ -12,6 +12,8 @@ from rich import print as rprint
 from rich.panel import Panel
 
 ocr_worker = PaddleOCR(use_angle_cls=True, show_log=False, lang="ch")
+warning_list = []
+error_list = []
 
 TARGET_IMAGE_DIRNAME = "images"
 
@@ -51,24 +53,47 @@ class personal_data:
     def empty(self) -> None:
         return len(self.name) == 0 and len(self.sex) == 0 and len(self.id) == 0 and len(self.birth) == 0 and len(self.addr) == 0
 
+def show_warning(image_path: str, msg: str) -> None:
+    rprint(f"[yellow]Warning[/]: {msg}")
+    warning_list.append(f"On file `{image_path}`: {msg}")
+    return
+
+def show_all_warnings() -> None:
+    rprint(f"Process threw {len(warning_list)} warnings:")
+    for msg in warning_list:
+        rprint(f"[yellow]•[/] {msg}")
+    return
+
+def show_error(image_path: str, msg: str) -> None:
+    rprint(f"[red]Error[/]: {msg}")
+    error_list.append(f"On file `{image_path}`: {msg}")
+    return
+
+def show_all_errors() -> None:
+    rprint(f"Process threw {len(error_list)} errors:")
+    for msg in error_list:
+        rprint(f"[yellow]•[/] {msg}")
+
 def perform_ocr(image_path: str) -> list:
     if not os.path.isfile(image_path):
-        rprint(f"[red]Error[/]: image `{image_path}` doesn't exist.")
+        show_error(image_path, f"image `{image_path}` doesn't exist.")
         return []
     elif os.path.splitext(image_path)[1] not in [".jpg", ".jpeg", ".png"]:
-        rprint(f"[red]Error[/]: image `{image_path}` has a not supported extension.")
+        show_error(image_path, f"image `{image_path}` has a not supported extension.")
         return []
     
     try:
         result = ocr_worker.ocr(image_path)
     except Exception as ex:
-        rprint(f"[red]Error[/]: failed to perform OCR on image `{image_path}`.\n", ex)
+        show_error(image_path, f"failed to perform OCR on image `{image_path}`.")
+        rprint(ex)
+        return []        
 
     return result[0]
 
-def check_ocr_result(result: list) -> bool:
+def check_ocr_result(result: list, image_path: str) -> bool:
     if len(result) < 1:
-        rprint("[red]Error[/]: result length less than 1.")
+        show_error(image_path, "result length less than 1.")
         return False
     else:
         tag_name_found = False
@@ -87,7 +112,7 @@ def check_ocr_result(result: list) -> bool:
             else: continue
 
         if not (tag_name_found and tag_sex_found and tag_id_found and tag_birth_found and tag_addr_found):
-            rprint("[red]Error[/]: not all necessary tag found.")
+            show_error(image_path, "not all necessary tag found.")
             return False
     return True
 
@@ -117,7 +142,7 @@ def get_uo_coord(coords: list[list[float]]) -> coord:
     # coord order: lu -> lo -> ro -> ru
     # TODO: orders of coords may be changed in different models, a reorder may be necessary
 
-def find_data_with_tag(result, tag: str, allow_multiline: bool) -> tuple[str, float]:
+def find_data_with_tag(result, tag: str, image_path: str, allow_multiline: bool) -> tuple[str, float]:
     tag_coord_uo: coord = {}
     for line in result:
         recognized_text = line[1][0]
@@ -125,7 +150,7 @@ def find_data_with_tag(result, tag: str, allow_multiline: bool) -> tuple[str, fl
             tag_coord_uo = get_uo_coord(line[0])
             break
     if tag_coord_uo.empty():
-        rprint(f"[red]Error[/]: tag `{tag}` not found in OCR result.")
+        show_error(image_path, f"tag `{tag}` not found in OCR result.")
         return ("", -1)
     
     closest_line = []
@@ -151,7 +176,7 @@ def find_data_with_tag(result, tag: str, allow_multiline: bool) -> tuple[str, fl
     
     if allow_multiline:
         if len(possible_lines) == 0:
-            rprint(f"[red]Error[/]: no data assigned to tag `{tag}` was found.")
+            show_error(image_path, f"no data assigned to tag `{tag}` was found.")
             return ("", -1)
         for i in range(0, len(possible_lines)):
             for j in range(0 , i):
@@ -174,47 +199,47 @@ def find_data_with_tag(result, tag: str, allow_multiline: bool) -> tuple[str, fl
             return (data, acc)
     else:
         if len(closest_line) == 0:
-            rprint(f"[red]Error[/]: no data assigned to tag `{tag}` was found.")
+            show_error(image_path, f"no data assigned to tag `{tag}` was found.")
             return ("", -1)
         return (closest_line[1][0], closest_line[1][1])
 
 def extract_picture_personal_data(image_path: str) -> personal_data:
     result = perform_ocr(image_path)
-    if not check_ocr_result(result):
+    if not check_ocr_result(result, image_path):
         return personal_data()
     # illegal ocr result
 
     data = personal_data()
 
-    data.name, acc = find_data_with_tag(result, TAG_NAME, allow_multiline=False)
+    data.name, acc = find_data_with_tag(result, TAG_NAME, image_path, allow_multiline=False)
     if acc == -1:
         return personal_data()
     elif acc < 0.95:
-        rprint("[yellow]Warning[/]: low accuracy expected on `name`.")
+        show_warning(image_path, "low accuracy expected on `name`.")
 
-    data.sex, acc = find_data_with_tag(result, TAG_SEX, allow_multiline=False)
+    data.sex, acc = find_data_with_tag(result, TAG_SEX, image_path, allow_multiline=False)
     if acc == -1:
         return personal_data()
     elif acc < 0.95:
-        rprint("[yellow]Warning[/]: low accuracy expected on `sex`.")
+        show_warning(image_path, "low accuracy expected on `sex`.")
 
-    data.id, acc = find_data_with_tag(result, TAG_ID, allow_multiline=False)
+    data.id, acc = find_data_with_tag(result, TAG_ID, image_path, allow_multiline=False)
     if acc == -1:
         return personal_data()
     elif acc < 0.95:
-        rprint("[yellow]Warning[/]: low accuracy expected on `id`.")
+        show_warning(image_path, "low accuracy expected on `id`.")
 
-    data.birth, acc = find_data_with_tag(result, TAG_BIRTH, allow_multiline=False)
+    data.birth, acc = find_data_with_tag(result, TAG_BIRTH, image_path, allow_multiline=False)
     if acc == -1:
         return personal_data()
     elif acc < 0.95:
-        rprint("[yellow]Warning[/]: low accuracy expected on `birth`.")
+        show_warning(image_path, "low accuracy expected on `birth`.")
 
-    data.addr, acc = find_data_with_tag(result, TAG_ADDR, allow_multiline=True)
+    data.addr, acc = find_data_with_tag(result, TAG_ADDR, image_path, allow_multiline=True)
     if acc == -1:
         return personal_data()
     elif acc < 0.95:
-        rprint("[yellow]Warning[/]: low accuracy expected on `addr`.")
+        show_warning(image_path, "low accuracy expected on `addr`.")
 
     return data
 
@@ -223,9 +248,9 @@ def extract_picture_personal_data(image_path: str) -> personal_data:
 # (or more) twice, so they need to be erased.
 # If this function returns an empty string, means nothing needs to be changed, address looks good.
 # If not, it returns the address which has been fixed.
-def check_addr_repetition(addr: str) -> str:
+def check_addr_repetition(addr: str, image_path: str) -> str:
     if len(addr) == 0:
-        rprint("[red]Error[/]: checking empty address.")
+        show_error(image_path, "checking empty address.")
         exit(1)
     # this should never happens...
     if addr[2] == "市":
@@ -242,14 +267,15 @@ def check_addr_repetition(addr: str) -> str:
 def main():
     os.chdir(os.path.dirname(__file__))
     if not os.path.isdir(TARGET_IMAGE_DIRNAME):
-        rprint(f"[red]Error[/]: target image directory `{TARGET_IMAGE_DIRNAME}` doesn't exist.")
+        show_error("__global__", f"target image directory `{TARGET_IMAGE_DIRNAME}` doesn't exist.")
         return 1
     personal_datas = []
     for _, _, files in os.walk(TARGET_IMAGE_DIRNAME):
         rprint(f"Total [cyan]{len(files)}[/] files found.")
         for file in files:
             rprint(f"Extracting personal datas from file `[cyan]{file}[/]`...")
-            data = extract_picture_personal_data(os.path.join(TARGET_IMAGE_DIRNAME, file))
+            image_path = os.path.join(TARGET_IMAGE_DIRNAME, file)
+            data = extract_picture_personal_data(image_path)
             if data.empty():
                 personal_datas.append({
                     "filename": file,
@@ -257,10 +283,10 @@ def main():
                 })
                 continue
             # OCR failed, push an empty data into list
-            check_addr_res = check_addr_repetition(data.addr)
+            check_addr_res = check_addr_repetition(data.addr, image_path)
             if len(check_addr_res) != 0:
                 data.addr = check_addr_res
-                rprint(f"[yellow]Warning[/]: Address repetition exists, fixed.")
+                show_warning(image_path, "address repetition exists, fixed.")
             # check address repetition
             panel_text = f" [yellow]•[/] [green]{TAG_NAME}[/]: {data.name}\n"
             panel_text += f" [yellow]•[/] [green]{TAG_SEX}[/]: {data.sex}\n"
@@ -276,6 +302,11 @@ def main():
                 "filename": file,
                 "data": data
             })
+
+    show_all_errors()
+    print()
+    show_all_warnings()
+    print()
 
     now_str = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
 
