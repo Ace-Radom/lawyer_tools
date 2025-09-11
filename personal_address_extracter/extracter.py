@@ -1,3 +1,4 @@
+import shutil
 import openpyxl
 import os
 import warnings
@@ -16,6 +17,7 @@ warning_list = []
 error_list = []
 
 TARGET_IMAGE_DIRNAME = "images"
+RENAMED_IMAGE_DIRNAME = "renamed"
 
 TAG_NAME = "姓名"
 TAG_SEX = "性别"
@@ -251,7 +253,7 @@ def extract_picture_personal_data(image_path: str) -> personal_data:
 def check_addr_repetition(addr: str, image_path: str) -> str:
     if len(addr) == 0:
         show_error(image_path, "checking empty address.")
-        exit(1)
+        raise RuntimeError("checking empty address")
     # this should never happens...
     if addr[2] == "市":
         plu = addr[:3]
@@ -268,8 +270,17 @@ def main():
     os.chdir(os.path.dirname(__file__))
     if not os.path.isdir(TARGET_IMAGE_DIRNAME):
         show_error("__global__", f"target image directory `{TARGET_IMAGE_DIRNAME}` doesn't exist.")
-        return 1
+        exit(1)
+    if not os.path.exists(RENAMED_IMAGE_DIRNAME):
+        os.makedirs(RENAMED_IMAGE_DIRNAME)
+    if not os.path.isdir(RENAMED_IMAGE_DIRNAME):
+        show_error("__global__", f"renamed image directory `{RENAMED_IMAGE_DIRNAME}` is not a directory.")
+        exit(1)
+    if os.listdir(RENAMED_IMAGE_DIRNAME):
+        show_warning("__global__", f"renamed image directory `{RENAMED_IMAGE_DIRNAME}` isn't empty, output may be overwritten.")
+
     personal_datas = []
+    name_dict = {}
     for _, _, files in os.walk(TARGET_IMAGE_DIRNAME):
         rprint(f"Total [cyan]{len(files)}[/] files found.")
         for file in files:
@@ -283,7 +294,15 @@ def main():
                 })
                 continue
             # OCR failed, push an empty data into list
-            check_addr_res = check_addr_repetition(data.addr, image_path)
+            try:
+                check_addr_res = check_addr_repetition(data.addr, image_path)
+            except:
+                personal_datas.append({
+                    "filename": file,
+                    "data": personal_data()
+                })
+                continue
+                # empty addr
             if len(check_addr_res) != 0:
                 data.addr = check_addr_res
                 show_warning(image_path, "address repetition exists, fixed.")
@@ -298,10 +317,21 @@ def main():
                 title=f"Datas from `[cyan]{file}[/]`"
             )
             rprint(panel)
+            # output result
             personal_datas.append({
                 "filename": file,
                 "data": data
             })
+            # push result
+            
+            if data.name in name_dict:
+                name_dict[data.name] += 1
+                renamed_image_path = os.path.join(RENAMED_IMAGE_DIRNAME, f"{data.name}_{name_dict[data.name]}{os.path.splitext(image_path)[1]}")
+            else:
+                name_dict[data.name] = 0
+                renamed_image_path = os.path.join(RENAMED_IMAGE_DIRNAME, f"{data.name}{os.path.splitext(image_path)[1]}")
+            shutil.copyfile(image_path, renamed_image_path)
+            # rename file & copy
 
     show_all_errors()
     print()
